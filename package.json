@@ -1,0 +1,22 @@
+{
+  "name": "tripting",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplikasi manajemen barang & kas untuk usaha thrifting kecil (Google Sheets + Apps Script + GitHub Pages).",
+  "scripts": {
+    "test": "node --test",
+    "clasp:login": "clasp login",
+    "push": "clasp push --force",
+    "deploy": "node scripts/deploy.js",
+    "deploy:dry": "node scripts/deploy.js --dry-run",
+    "deployments": "clasp deployments",
+    "pages:enable": "node scripts/pages-enable.js",
+    "pages:status": "gh api repos/{owner}/{repo}/pages"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.4.1"
+  }
+}
