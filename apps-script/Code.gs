@@ -10,6 +10,7 @@
  *  - Staf: foto barang wajib; bukti wajib untuk transfer, pencairan COD, dan SEMUA kas keluar/masuk
  *    (termasuk ongkir, biaya retur, Pindah Saldo, dan pembelian dari Rekening). Staf tidak bisa membatalkan.
  *  - Setiap aksi tulis tercatat di sheet Log. Aksi yang gagal di tengah dipulihkan otomatis (oleh "SISTEM").
+ *  - Satu-satunya aksi tanpa PIN adalah `katalog` (untuk calon pembeli): hanya kolom aman, lihat katalog_().
  */
 
 const TZ = 'Asia/Jakarta';
@@ -36,6 +37,8 @@ const SESI_MS = 30 * 24 * 60 * 60 * 1000;    // masa berlaku token sesi
 const MAKS_SESI = 40;                        // jumlah sesi tersimpan (batas ukuran properti 9 KB)
 const MAKS_FILE = 4 * 1024 * 1024;           // byte, per gambar
 const MAKS_RP = 10000000000;                 // batas kewajaran nominal (Rp10 miliar)
+const MAKS_KATALOG = 200;                    // jumlah barang maksimum di katalog publik
+const TTL_KATALOG = 120;                     // detik; cache katalog publik (dihapus juga setiap ada aksi tulis)
 
 let CTX_ = null;   // konteks aksi tulis yang sedang berjalan: { rid, ops } (direset di setiap eksekusi)
 
@@ -108,6 +111,7 @@ function doPost(e) {
     const data = req.data && typeof req.data === 'object' && !Array.isArray(req.data) ? req.data : {};
     let hasil;
     if (aksi === 'login') hasil = ACTIONS.login({ pin: req.pin }, null);        // satu-satunya aksi yang memakai PIN
+    else if (hasOwn_(PUBLIK, aksi)) hasil = ACTIONS[aksi]({}, null);            // tanpa token: hanya data yang memang untuk umum
     else hasil = ACTIONS[aksi](data, authToken_(req.token));
     out = { ok: true, data: hasil };
   } catch (err) {
@@ -116,7 +120,11 @@ function doPost(e) {
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/** Aksi tanpa PIN/token. Tiap tambahan di sini membuka data ke SEMUA orang yang tahu URL: kembalikan hanya kolom yang aman. */
+const PUBLIK = { katalog: 1 };
+
 const ACTIONS = {
+  katalog: katalog_,        // publik, TANPA lock (agar kunjungan pembeli tak membuat input staf "sibuk")
   login: kunci_(login_),
   keluar: kunci_(keluar_),
   getAll: kunci_(getAll_),
@@ -198,6 +206,39 @@ function getAll_(d, u) {
     log: admin ? bersih(logTerakhir_(40)) : [],
     peringatan: admin ? peringatan : []
   };
+}
+
+/**
+ * Katalog untuk calon pembeli (PUBLIK, tanpa PIN). Hanya barang Tersedia / Dipesan dan hanya kolom aman:
+ * kode, nama, kategori, ukuran, kondisi, harga (= target harga jual), foto, status.
+ * TIDAK PERNAH: harga_beli, sumber (penjual), catatan, dibuat_oleh, id, tanggal, kas, penjualan.
+ * Di-cache TTL_KATALOG detik; dihapus setiap aksi tulis (lihat withLock_).
+ */
+function katalog_() {
+  const cache = CacheService.getScriptCache();
+  const c = cache.get('KATALOG');
+  if (c) { try { return JSON.parse(c); } catch (e) { /* cache rusak → bangun ulang */ } }
+  let baris;
+  try { baris = rows_('Barang'); } catch (e) { throw galat_('Katalog sedang tidak tersedia. Coba lagi nanti.', 'KATALOG'); }
+  const FOTO_OK = /^https:\/\/drive\.google\.com\/thumbnail\?id=[A-Za-z0-9_-]+&sz=w\d{2,4}$/;
+  const item = function (b) {
+    const h = Number(b.harga_target);
+    return {
+      kode: String(b.kode), nama: String(b.nama), kategori: String(b.kategori), ukuran: String(b.ukuran), kondisi: String(b.kondisi),
+      harga: isFinite(h) && h > 0 ? Math.floor(h) : 0,
+      foto: FOTO_OK.test(String(b.foto)) ? String(b.foto) : '',   // hanya URL thumbnail Drive kita
+      status: b.status
+    };
+  };
+  const baru = baris.slice().reverse();                            // terbaru dulu
+  const tersedia = baru.filter(function (b) { return b.status === 'Tersedia'; });
+  const dipesan = baru.filter(function (b) { return b.status === 'Dipesan'; });
+  const hasil = { barang: tersedia.concat(dipesan).slice(0, MAKS_KATALOG).map(item), diperbarui: now_() };
+  try { cache.put('KATALOG', JSON.stringify(hasil), TTL_KATALOG); } catch (e) { /* terlalu besar → tanpa cache */ }
+  return hasil;
+}
+function hapusCacheKatalog_() {
+  try { CacheService.getScriptCache().remove('KATALOG'); } catch (e) { /* hanya akselerasi */ }
 }
 
 function logTerakhir_(n) {
@@ -459,10 +500,12 @@ function withLock_(fn) {
     let hasil;
     try {
       hasil = fn(d, u);
+      hapusCacheKatalog_();
     } catch (err) {
       const ops = CTX_.ops;
       CTX_ = null;
       pulihkan_(ops, err, u);
+      hapusCacheKatalog_();
       throw err;
     } finally {
       CTX_ = null;

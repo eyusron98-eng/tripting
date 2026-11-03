@@ -4,7 +4,8 @@ Backend: Google Sheets + Apps Script · Frontend: `index.html` (React CDN) di Gi
 Pengguna: **Eri** (admin, memantau) dan **Deni** (staf, input dari HP).
 
 ```
-index.html            frontend satu file (GitHub Pages, branch main)
+index.html            aplikasi admin/staf (satu file, GitHub Pages, branch main)
+katalog.html          katalog publik untuk calon pembeli (JS biasa, ringan, tanpa Babel/React)
 apps-script/
   Code.gs             backend (satu-satunya salinan; di-push dengan clasp)
   appsscript.json     zona waktu Jakarta, V8, web app: jalankan sebagai pemilik, akses anonim
@@ -112,6 +113,32 @@ Ringkasan: saldo per akun, laba kotor bulan ini, modal tertahan (stok + barang d
 log aktivitas, dan banner **"Data di Sheet perlu diperiksa"** bila ada sel yang rusak (mis. angka berisi teks). Daftar temuan review kode
 dan status perbaikannya: [`docs/TEMUAN.md`](docs/TEMUAN.md).
 
+## Katalog untuk calon pembeli
+
+**Link:** <https://eyusron98-eng.github.io/tripting/katalog.html>. Bagikan ke Instagram/WhatsApp/bio. Setiap barang juga punya link sendiri:
+`.../katalog.html#TR2611-001` (kode barang ada di detail barang di aplikasi), jadi bisa ditempel di postingan satu barang.
+
+Pembeli melihat foto, memakai pencarian/kategori, membuka detail, lalu menekan **Pesan via WhatsApp** atau **Tanya-tanya dulu**. Keduanya membuka
+chat ke **WhatsApp Deni (6283846834142)** dengan pesan yang sudah terisi (nama barang, kode, harga). **Tidak ada pesanan yang tersimpan di sistem:**
+pesanan terjadi di chat, lalu Deni mencatat penjualannya di aplikasi seperti biasa (COD → *Menunggu COD*).
+
+| Tampil di katalog | **Tidak pernah** tampil |
+|---|---|
+| Foto, nama, kategori, ukuran, kondisi, kode | Harga beli, nama penjual (sumber), catatan, siapa yang input, tanggal |
+| Harga = **Target harga jual** (kosong/0 → "Tanya harga") | Penjualan, kas, saldo, log, PIN |
+| Barang *Tersedia*, dan *Dipesan* dengan label "Sedang dipesan" (tombol pesan nonaktif) | Barang Terjual, Rusak, Batal |
+
+- **Atur harga katalog:** Barang → pilih barang → **Edit** → *Target harga jual*. Barang tampil maksimal 200 yang terbaru.
+- **Kesegaran:** setiap input di aplikasi langsung menyegarkan katalog; perubahan langsung di Sheet baru tampil ≤ 2 menit (cache).
+- **Ganti nomor WhatsApp:** edit satu baris `const WA_NOMOR = '…';` di `katalog.html` (format `628…`, tanpa `+`, spasi, atau `0` di depan). Tes menolak nomor yang bukan format ponsel Indonesia.
+- **Pasang:** (1) perbarui backend: tempel `Code.gs` terbaru lalu **Terapkan → Kelola deployment → ✏️ → Versi baru → Terapkan** (atau `npm run deploy`);
+  tanpa ini katalog menampilkan "Katalog belum diaktifkan di server". (2) Gabungkan ke `main`; Pages memperbarui `katalog.html` sendiri.
+- **Mengapa file terpisah:** `index.html` memuat Babel+React (±3 MB), terlalu berat untuk HP pembeli dengan data seluler, dan memisahkannya membuat aplikasi admin tidak tersentuh.
+  Aturan awal "frontend satu file" dilonggarkan menjadi "satu file per tujuan"; tetap tanpa build step dan tanpa library luar.
+- **Batas yang perlu diketahui:** katalog adalah **satu-satunya** bagian API tanpa PIN, jadi siapa pun yang tahu URL bisa memanggilnya (hanya mengembalikan 8 kolom di atas).
+  Apps Script tidak bisa membatasi per pengunjung. Bila katalog sangat ramai, kuota harian gratis Google bisa habis dan aplikasi admin ikut terganggu sementara; cache 2 menit meredamnya.
+  Bila itu terjadi, katalog perlu dipindah ke berkas statis. Pratinjau link (WhatsApp/Instagram) hanya menampilkan judul dan deskripsi, tanpa foto.
+
 ## Ganti PIN
 Apps Script → Setelan proyek → Properti skrip: hapus `USERS`, lalu jalankan `setup()`. PIN baru muncul di Log eksekusi dan **semua sesi lama
 otomatis tidak berlaku**.
@@ -128,18 +155,23 @@ otomatis tidak berlaku**.
 `CacheService`, `Utilities`, `ContentService`. Mencakup siklus tambah barang → jual transfer, COD lunas (diterima < harga), COD retur, pindah saldo,
 batal penjualan/barang/kas, penolakan aksi admin oleh staf, PIN salah & lockout, serta tiap temuan review.
 
+Katalog publik diuji di dua lapis: backend (hanya 8 kolom aman, barang yang boleh tampil, cache dan penghapusannya, tanpa lock) dan halaman (logika pencarian, link WhatsApp, larangan `innerHTML`/sumber pihak ketiga/kolom privat, nomor berformat ponsel).
+
 Batas yang perlu Anda tahu: ini **model** Apps Script, bukan Google asli. Hijau di sini belum membuktikan perilaku asli Sheets/Drive, karena itu ada smoke test di bawah.
 
 ## Smoke test di Sheet asli (±10 menit, sekali setelah pemasangan/pembaruan)
 
 1. Setelah `setup()`: Sheet punya tab Barang, Penjualan, Kas, Log (Log punya 5 kolom, kolom terakhir `req_id`); Drive punya dua folder, "Tripting - Bukti (PRIVAT…)" dan "Tripting - Foto barang".
-2. Login Eri → Barang → tambah barang dengan **ukuran `2-3`**, **nama `=1+1`**, kondisi/catatan `3/4`. Di Sheet, nilai itu harus persis teks tersebut (bukan tanggal, bukan `2`). Lalu **Batalkan** barang ini.
+2. Login Eri → Barang → tambah barang dengan **ukuran `2-3`**, **nama `=1+1`**, dan **catatan `3/4`** (kondisi adalah pilihan dropdown, bukan teks bebas). Di Sheet, nilai itu harus persis teks tersebut (bukan tanggal, bukan `2`). Lalu **Batalkan** barang ini.
 3. Foto barang tampil di daftar. Buka link foto di jendela penyamaran → terbuka. Buka link **bukti** (`bukti` di Penjualan/Kas) di jendela penyamaran → harus **minta akses**.
 4. Login Deni di HP: tambah kas keluar tanpa bukti → ditolak; dengan bukti → berhasil; tidak ada tombol "batalkan".
 5. Jual COD → barang *Dipesan*, saldo tidak berubah. Konfirmasi lunas dengan nominal bersih lebih kecil dari harga → saldo bertambah sebesar nominal bersih.
 6. Catat kas dan **tekan Simpan dua kali dengan cepat** → hanya **satu** baris baru di sheet Kas.
 7. Bandingkan Saldo di Ringkasan dengan penjumlahan manual kolom `nominal` (status Aktif) di sheet Kas.
 8. Pastikan tanggal di sheet berupa `2026-11-03` (teks) dan sesuai hari ini (WIB).
+9. **Katalog:** buka `…/katalog.html` di jendela penyamaran (tanpa login). Barang berstatus Tersedia tampil lengkap dengan foto; barang yang terjual/dibatalkan tidak tampil. Di detail barang, tidak ada harga beli atau nama penjual.
+10. Di detail barang, tekan **Pesan via WhatsApp**: harus terbuka chat ke **nomor Deni** dengan pesan terisi (nama, kode, harga). Cukup lihat tujuannya, tidak perlu dikirim.
+11. Ubah *Target harga jual* sebuah barang di aplikasi: dalam ≤ 2 menit katalog menampilkan harga baru.
 
 Bila langkah 2 atau 8 gagal (sel berubah jadi tanggal/angka), catat perilakunya: itu bagian yang hanya bisa dipastikan di Google asli.
 

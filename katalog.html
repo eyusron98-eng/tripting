@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6f5c">
+<title>Katalog Tripting</title>
+<meta name="description" content="Katalog barang thrift Tripting. Pilih barang yang kamu suka, lalu pesan atau tanya-tanya langsung lewat WhatsApp.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="id_ID">
+<meta property="og:title" content="Katalog Tripting">
+<meta property="og:description" content="Barang thrift pilihan. Pilih, lalu pesan atau tanya langsung lewat WhatsApp.">
+<style>
+:root{--bg:#f5f4f0;--card:#fff;--ink:#1d1d1b;--muted:#6b6a65;--line:#e4e2dc;--pri:#1f6f5c;--pri-ink:#fff;--warn:#a15c00;--chip:#ecebe6;--shadow:0 4px 14px rgba(0,0,0,.18)}
+@media (prefers-color-scheme:dark){:root{--bg:#121412;--card:#1c1f1d;--ink:#ecebe6;--muted:#9a9a94;--line:#2c302d;--pri:#4fb898;--pri-ink:#0b1a15;--warn:#f0b35a;--chip:#262a27}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.muted{color:var(--muted)}.small{font-size:13px}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top-in{max-width:960px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.top-in>div{flex:1;min-width:0}
+h1{font-size:20px;margin:0}.sub{margin:0;font-size:13px;color:var(--muted)}
+main{max-width:960px;margin:0 auto;padding:12px 16px 110px}
+.btn{display:inline-block;text-align:center;text-decoration:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 14px;border-radius:10px;font:inherit;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--pri);color:var(--pri-ink);border-color:var(--pri)}
+.btn.block{display:block;width:100%;margin-top:8px}
+.btn[aria-disabled=true]{opacity:.55;pointer-events:none}
+.btn.sm{padding:8px 12px;font-size:13px;white-space:nowrap}
+input[type=search]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;-webkit-appearance:none}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0 4px;-webkit-overflow-scrolling:touch}
+.chip{border:0;background:var(--chip);color:var(--ink);padding:7px 13px;border-radius:99px;font:inherit;font-size:13px;white-space:nowrap;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--pri);color:var(--pri-ink)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media (min-width:640px){.grid{grid-template-columns:repeat(3,1fr);gap:14px}}
+@media (min-width:860px){.grid{grid-template-columns:repeat(4,1fr)}}
+.kartu{display:block;text-align:left;padding:0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;overflow:hidden;font:inherit;cursor:pointer;width:100%}
+.kartu:focus-visible,.chip:focus-visible,.btn:focus-visible,.x:focus-visible{outline:3px solid var(--pri);outline-offset:2px}
+.foto{position:relative;padding-top:125%;background:var(--chip);overflow:hidden}
+.foto img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+.nofoto{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);text-align:center;padding:8px}
+.badge{position:absolute;left:8px;top:8px;background:var(--warn);color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px}
+.kartu.habis .foto img{opacity:.55}
+.info{padding:9px 10px 11px}
+.nama{font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.9em;line-height:1.45}
+.meta{font-size:12px;color:var(--muted);margin-top:2px;min-height:1.4em}
+.harga{font-weight:700;margin-top:4px;color:var(--pri)}
+.harga.big{font-size:22px;margin:2px 0 8px}
+.sk .foto{background:var(--chip);animation:kedip 1.2s ease-in-out infinite}
+.sk .info div{height:12px;border-radius:6px;background:var(--chip);margin:6px 0}
+@keyframes kedip{50%{opacity:.5}}
+@media (prefers-reduced-motion:reduce){.sk .foto{animation:none}}
+.pesan{margin:28px 0;text-align:center}.pesan p{margin:0 0 12px}
+.fab-wa{position:fixed;right:max(16px,calc(50% - 464px));bottom:calc(16px + env(safe-area-inset-bottom));z-index:6;box-shadow:var(--shadow);border-radius:99px;padding:13px 18px}
+footer{max-width:960px;margin:0 auto;padding:0 16px 90px;text-align:center}
+.overlay{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
+.overlay[hidden]{display:none}
+.sheet{position:relative;background:var(--bg);width:100%;max-width:520px;max-height:94vh;overflow:auto;border-radius:18px 18px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+@media (min-width:640px){.overlay{align-items:center}.sheet{border-radius:18px}}
+.x{position:absolute;right:10px;top:10px;z-index:2;width:38px;height:38px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:22px;line-height:1;cursor:pointer}
+.dfoto{position:relative;width:100%;height:min(46vh,460px);background:var(--chip)}
+.dfoto img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.dbody{padding:14px 16px 0}
+.dbody h2{font-size:18px;margin:0 0 2px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.tag{font-size:12px;background:var(--chip);padding:3px 10px;border-radius:99px}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div><h1 id="judul">Tripting</h1><p class="sub">Katalog barang thrift</p></div>
+  <a id="waAtas" class="btn primary sm" target="_blank" rel="noopener noreferrer">Tanya via WhatsApp</a>
+</div></header>
+
+<main>
+  <input id="cari" type="search" placeholder="Cari barang: jaket, kaos, ukuran…" aria-label="Cari barang" autocomplete="off">
+  <div id="kategori" class="chips" role="group" aria-label="Kategori"></div>
+  <p id="jumlah" class="muted small" aria-live="polite"></p>
+  <div id="grid" class="grid"></div>
+  <div id="pesan" class="pesan" hidden></div>
+  <noscript><p class="pesan">Katalog ini membutuhkan JavaScript. Silakan aktifkan JavaScript di browser Anda.</p></noscript>
+</main>
+
+<footer><p id="info" class="small muted"></p></footer>
+<a id="waFab" class="btn primary fab-wa" target="_blank" rel="noopener noreferrer">Chat WhatsApp</a>
+
+<div id="overlay" class="overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dNama">
+    <button id="tutup" class="x" type="button" aria-label="Tutup">×</button>
+    <div id="dFoto" class="dfoto"></div>
+    <div class="dbody">
+      <h2 id="dNama"></h2>
+      <p id="dHarga" class="harga big"></p>
+      <div id="dTag" class="tags"></div>
+      <p id="dKode" class="muted small"></p>
+      <a id="dPesan" class="btn primary block" target="_blank" rel="noopener noreferrer">Pesan via WhatsApp</a>
+      <a id="dTanya" class="btn block" target="_blank" rel="noopener noreferrer">Tanya-tanya dulu</a>
+      <p class="muted small">Pembayaran dan pengiriman dibicarakan lewat WhatsApp.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====== KONFIGURASI (ubah di sini) ====== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbznmHTfT5ZR2JfV3lzM-Zj10aH0qfRiv9zLbfvfdrvDBal2FiyTMifS_laaIukbhQJS/exec';
+const WA_NOMOR = '6283846834142';   // nomor WhatsApp Deni: format internasional tanpa +, spasi, atau 0 di depan
+const NAMA_TOKO = 'Tripting';
+
+/* ==== LOGIKA MURNI (diuji oleh tests/katalog-ui.test.js; tanpa DOM) ==== */
+function rupiah(n) { return 'Rp' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+function hargaTeks(h) { return Number(h) > 0 ? rupiah(h) : 'Tanya harga'; }
+function pesanWA(b, jenis, toko) {
+  if (!b) return 'Halo Kak, saya lihat katalog ' + toko + ' dan mau tanya-tanya.';
+  const rinci = b.nama + ' (kode ' + b.kode + ', ' + hargaTeks(b.harga) + ')';
+  return jenis === 'tanya' ? 'Halo Kak, saya mau tanya soal ' + rinci + '.' : 'Halo Kak, saya mau pesan ' + rinci + '. Apakah masih tersedia?';
+}
+function linkWA(nomor, teks) { return 'https://wa.me/' + nomor + '?text=' + encodeURIComponent(teks); }
+function saring(daftar, q, kategori) {
+  const kata = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  return daftar.filter(function (b) {
+    if (kategori && b.kategori !== kategori) return false;
+    const jerami = [b.nama, b.kategori, b.ukuran, b.kondisi, b.kode].join(' ').toLowerCase();
+    return kata.every(function (k) { return jerami.indexOf(k) >= 0; });
+  });
+}
+function kategoriUnik(daftar) {
+  const hitung = {};
+  daftar.forEach(function (b) { if (b.kategori) hitung[b.kategori] = (hitung[b.kategori] || 0) + 1; });
+  return Object.keys(hitung).sort(function (a, b) { return hitung[b] - hitung[a] || a.localeCompare(b); });
+}
+function fotoUkuran(url, w) { return url ? String(url).replace(/sz=w\d+/, 'sz=w' + w) : ''; }
+function kodeDariHash(hash) { const m = /^#(TR\d{4}-\d{3,})$/.exec(hash || ''); return m ? m[1] : ''; }
+function tanggalPendek(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})$/.exec(s || '');
+  return m ? m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ' WIB' : '';
+}
+/* ==== AKHIR LOGIKA MURNI ==== */
+
+const S = { data: [], q: '', kat: '', status: 'memuat', pesan: '', diperbarui: '' };
+const $ = function (id) { return document.getElementById(id); };
+function kosongkan(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+/* Semua teks dari server masuk lewat textContent / createTextNode; tidak ada API penyisip HTML sama sekali. */
+function el(tag, props) {
+  const e = document.createElement(tag);
+  Object.keys(props || {}).forEach(function (k) {
+    const v = props[k];
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  });
+  for (let i = 2; i < arguments.length; i++) if (arguments[i]) e.appendChild(arguments[i]);
+  return e;
+}
+function pasangWA(a, teks) { a.setAttribute('href', linkWA(WA_NOMOR, teks)); }
+function gambar(b, w, alt) {
+  const kotak = document.createDocumentFragment();
+  const tanpa = function () { return el('span', { class: 'nofoto', text: 'Foto belum tersedia' }); };
+  if (!b.foto) { kotak.appendChild(tanpa()); return kotak; }
+  const img = el('img', { src: fotoUkuran(b.foto, w), alt: alt, decoding: 'async', referrerpolicy: 'no-referrer' });
+  if (w < 600) img.setAttribute('loading', 'lazy');
+  img.addEventListener('error', function () { if (img.parentNode) { img.parentNode.replaceChild(tanpa(), img); } });
+  kotak.appendChild(img);
+  return kotak;
+}
+
+/* ====== Tampilan ====== */
+function kartu(b) {
+  const dipesan = b.status === 'Dipesan';
+  const foto = el('div', { class: 'foto' });
+  foto.appendChild(gambar(b, 400, b.nama));
+  if (dipesan) foto.appendChild(el('span', { class: 'badge', text: 'Sedang dipesan' }));
+  const meta = [b.ukuran ? 'Ukuran ' + b.ukuran : '', b.kondisi].filter(Boolean).join(' · ');
+  return el('button', { class: 'kartu' + (dipesan ? ' habis' : ''), type: 'button', 'data-kode': b.kode, 'aria-label': b.nama + ', ' + hargaTeks(b.harga) + (dipesan ? ', sedang dipesan' : ''), onclick: function () { buka(b.kode, true); } },
+    foto,
+    el('div', { class: 'info' }, el('div', { class: 'nama', text: b.nama }), el('div', { class: 'meta', text: meta }), el('div', { class: 'harga', text: hargaTeks(b.harga) })));
+}
+function skeleton() {
+  const f = document.createDocumentFragment();
+  for (let i = 0; i < 6; i++) f.appendChild(el('div', { class: 'kartu sk', 'aria-hidden': 'true' }, el('div', { class: 'foto' }), el('div', { class: 'info' }, el('div'), el('div'), el('div'))));
+  return f;
+}
+function pesanKosong(teks, tombol) {
+  const p = $('pesan'); kosongkan(p);
+  p.appendChild(el('p', { class: 'muted', text: teks }));
+  if (tombol) p.appendChild(tombol);
+  p.hidden = false;
+}
+function render() {
+  const grid = $('grid'), pesan = $('pesan'), jumlah = $('jumlah');
+  kosongkan(grid); pesan.hidden = true; jumlah.textContent = '';
+  renderKategori();
+  if (S.status === 'memuat') { grid.appendChild(skeleton()); return; }
+  if (S.status === 'galat') {
+    pesanKosong(S.pesan, el('button', { class: 'btn primary', type: 'button', text: 'Coba lagi', onclick: muat }));
+    return;
+  }
+  const daftar = saring(S.data, S.q, S.kat);
+  jumlah.textContent = daftar.length + ' barang' + (S.q || S.kat ? ' ditemukan' : '');
+  daftar.forEach(function (b) { grid.appendChild(kartu(b)); });
+  if (!S.data.length) {
+    const wa = el('a', { class: 'btn primary', target: '_blank', rel: 'noopener noreferrer', text: 'Tanya via WhatsApp' }); pasangWA(wa, pesanWA(null, '', NAMA_TOKO));
+    pesanKosong('Belum ada barang yang tersedia saat ini. Cek lagi nanti, atau tanya langsung lewat WhatsApp.', wa);
+  } else if (!daftar.length) {
+    pesanKosong('Tidak ada barang yang cocok. Coba kata kunci lain.', el('button', { class: 'btn', type: 'button', text: 'Hapus pencarian', onclick: function () { S.q = ''; S.kat = ''; $('cari').value = ''; render(); } }));
+  }
+  $('info').textContent = 'Harga dan ketersediaan bisa berubah.' + (S.diperbarui ? ' Diperbarui ' + tanggalPendek(S.diperbarui) + '.' : '');
+}
+function renderKategori() {
+  const box = $('kategori'); kosongkan(box);
+  const daftar = kategoriUnik(S.data);
+  if (daftar.length < 2) return;
+  ['Semua'].concat(daftar).forEach(function (k) {
+    const aktif = (k === 'Semua' && !S.kat) || k === S.kat;
+    box.appendChild(el('button', { class: 'chip', type: 'button', 'aria-pressed': aktif ? 'true' : 'false', text: k, onclick: function () { S.kat = k === 'Semua' ? '' : k; render(); } }));
+  });
+}
+
+/* ====== Detail barang (bisa dibagikan: katalog.html#TR2611-001) ====== */
+let fokusSebelum = null;
+function tampilDetail(b) {
+  const dipesan = b.status === 'Dipesan';
+  kosongkan($('dFoto')); $('dFoto').appendChild(gambar(b, 800, b.nama));
+  $('dNama').textContent = b.nama;
+  $('dHarga').textContent = hargaTeks(b.harga);
+  const tag = $('dTag'); kosongkan(tag);
+  [b.kategori, b.ukuran ? 'Ukuran ' + b.ukuran : '', b.kondisi, dipesan ? 'Sedang dipesan' : ''].filter(Boolean).forEach(function (t) { tag.appendChild(el('span', { class: 'tag', text: t })); });
+  $('dKode').textContent = 'Kode: ' + b.kode;
+  const pesan = $('dPesan'), tanya = $('dTanya');
+  pasangWA(tanya, pesanWA(b, 'tanya', NAMA_TOKO));
+  if (dipesan) { pesan.removeAttribute('href'); pesan.setAttribute('aria-disabled', 'true'); pesan.textContent = 'Sedang dipesan orang lain'; }
+  else { pasangWA(pesan, pesanWA(b, 'pesan', NAMA_TOKO)); pesan.removeAttribute('aria-disabled'); pesan.textContent = 'Pesan via WhatsApp'; }
+  const ov = $('overlay');
+  if (ov.hidden) { fokusSebelum = document.activeElement; ov.hidden = false; document.body.style.overflow = 'hidden'; $('tutup').focus(); }
+}
+function tutupDetail() {
+  const ov = $('overlay');
+  if (ov.hidden) return;
+  ov.hidden = true; document.body.style.overflow = '';
+  if (fokusSebelum && fokusSebelum.focus) fokusSebelum.focus();
+}
+function buka(kode, dariKlik) {
+  const b = S.data.filter(function (x) { return x.kode === kode; })[0];
+  if (!b) return;
+  tampilDetail(b);
+  if (dariKlik && location.hash !== '#' + kode) { try { history.pushState({ kat: 1 }, '', '#' + kode); } catch (e) { /* abaikan */ } }
+}
+function tutupDariTombol() {
+  if (history.state && history.state.kat) history.back();
+  else { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* abaikan */ } tutupDetail(); }
+}
+function selaraskanHash() {
+  const kode = kodeDariHash(location.hash);
+  const b = kode && S.data.filter(function (x) { return x.kode === kode; })[0];
+  if (b) tampilDetail(b); else tutupDetail();
+}
+
+/* ====== Data ====== */
+const KUNCI_CACHE = 'tripting_katalog_v1';
+function bacaCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(KUNCI_CACHE) || 'null');
+    if (c && Array.isArray(c.d) && Date.now() - c.t < 30 * 60 * 1000) return c;
+  } catch (e) { /* tanpa cache */ }
+  return null;
+}
+function simpanCache(d, diperbarui) { try { localStorage.setItem(KUNCI_CACHE, JSON.stringify({ t: Date.now(), d: d, p: diperbarui })); } catch (e) { /* abaikan */ } }
+
+async function muat() {
+  if (!S.data.length) { S.status = 'memuat'; render(); }
+  const ctl = new AbortController();
+  const timer = setTimeout(function () { ctl.abort(); }, 25000);
+  try {
+    const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'katalog' }), signal: ctl.signal });
+    const j = await res.json();
+    if (!j.ok) { const e = new Error(j.error || ''); e.dariServer = true; throw e; }
+    S.data = j.data.barang; S.diperbarui = j.data.diperbarui; S.status = 'ok';
+    simpanCache(S.data, S.diperbarui);
+  } catch (e) {
+    if (!S.data.length) {
+      S.status = 'galat';
+      S.pesan = e.dariServer && /tidak dikenal/i.test(e.message)
+        ? 'Katalog belum diaktifkan di server. Silakan hubungi penjual lewat WhatsApp.'
+        : e.dariServer ? 'Katalog sedang tidak tersedia. Coba lagi sebentar lagi.'
+          : 'Tidak bisa memuat katalog. Periksa sinyal internet, lalu coba lagi.';
+    }
+  } finally { clearTimeout(timer); }
+  render();
+  selaraskanHash();
+}
+
+/* ====== Mulai ====== */
+document.title = 'Katalog ' + NAMA_TOKO;
+$('judul').textContent = NAMA_TOKO;
+pasangWA($('waAtas'), pesanWA(null, '', NAMA_TOKO));
+pasangWA($('waFab'), pesanWA(null, '', NAMA_TOKO));
+$('cari').addEventListener('input', function (e) { S.q = e.target.value; render(); });
+$('tutup').addEventListener('click', tutupDariTombol);
+$('overlay').addEventListener('click', function (e) { if (e.target === $('overlay')) tutupDariTombol(); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') tutupDariTombol(); });
+window.addEventListener('popstate', selaraskanHash);
+window.addEventListener('hashchange', selaraskanHash);
+const awal = bacaCache();
+if (awal) { S.data = awal.d; S.diperbarui = awal.p || ''; S.status = 'ok'; }
+render();
+selaraskanHash();
+muat();
+</script>
+</body>
+</html>
