@@ -64,6 +64,7 @@ class Sheet {
   getDataRange() {
     return {
       getValues: () => {
+        this.env.reads++;
         const last = this.getLastRow();
         const w = Math.max(0, ...this.data.slice(0, last).map(r => r.length));
         return this.data.slice(0, last).map(r => { const x = r.slice(); while (x.length < w) x.push(''); return x; });
@@ -77,6 +78,7 @@ class Sheet {
     const self = this;
     const rg = {
       getValues() {
+        self.env.reads++;
         return Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => {
           const v = (self.data[r - 1 + i] || [])[c - 1 + j];
           return v === undefined || v === null ? '' : v;
@@ -96,7 +98,7 @@ class Sheet {
 function buatEnv(opsi = {}) {
   const kodePath = process.env.GAS_CODE || opsi.kode || KODE_DEFAULT;
   const env = {
-    sheets: {}, props: {}, cache: {}, logs: [], hooks: {},
+    sheets: {}, props: {}, cache: {}, logs: [], hooks: {}, reads: 0,   // reads = berapa kali sheet dibaca (untuk menguji cache)
     clock: { now: Date.parse(opsi.waktu || '2026-11-03T03:00:00Z') },   // 10:00 WIB
     sheetTz: opsi.sheetTz || 'Asia/Jakarta',
     lock: { held: false, busy: false, kali: 0 },
