@@ -1,0 +1,7 @@
+node_modules/
+# kredensial & konfigurasi lokal clasp (JANGAN di-commit)
+.clasp.json
+.clasprc.json
+.deployment-id
+*.log
+.DS_Store

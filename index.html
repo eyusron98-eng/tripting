@@ -60,18 +60,30 @@ nav.tabs button.on{color:var(--pri);font-weight:650}
 /* ====== KONFIGURASI: tempel URL Web App Apps Script (berakhiran /exec) ====== */
 const API_URL = 'TEMPEL_URL_WEB_APP_DI_SINI';
 
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 const N = v => Number(v) || 0;
 const rp = n => 'Rp' + new Intl.NumberFormat('id-ID').format(Math.round(N(n)));
 const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
 const todayStr = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
-const umur = tgl => tgl ? Math.max(0, Math.floor((new Date(todayStr()) - new Date(String(tgl).slice(0, 10))) / 86400000)) : 0;
-const tglPendek = t => { if (!t) return ''; const [y, m, d] = String(t).slice(0, 10).split('-'); return `${d}/${m}/${y.slice(2)}`; };
+const umur = tgl => {
+  if (!tgl) return 0;
+  const h = (new Date(todayStr()) - new Date(String(tgl).slice(0, 10))) / 86400000;
+  return Number.isFinite(h) ? Math.max(0, Math.floor(h)) : 0;
+};
+const tglPendek = t => {
+  if (!t) return '';
+  const s = String(t).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return String(t);
+  const [y, m, d] = s.split('-'); return `${d}/${m}/${y.slice(2)}`;
+};
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } },
   del(k) { try { localStorage.removeItem(k); } catch (e) { } }
 };
+store.del('tr_pin'); // versi lama menyimpan PIN di perangkat; sekarang hanya token sesi
+/* ID unik per formulir: kirim ulang formulir yang sama (mis. sinyal putus) tidak akan tercatat dobel */
+const newRid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
 
 const KATEGORI_BARANG = ['Kaos', 'Kemeja', 'Jaket', 'Sweater', 'Celana', 'Rok/Dress', 'Sepatu', 'Tas', 'Topi', 'Aksesoris', 'Lainnya'];
 const KONDISI = ['Seperti baru', 'Baik', 'Ada minus'];
@@ -80,15 +92,27 @@ const AKUN = ['Tunai', 'Rekening'];
 const KAT_KAS = { Masuk: ['Setoran Modal', 'Pemasukan Lain'], Keluar: ['Operasional', 'Ongkir', 'Upah', 'Setor ke Pemilik', 'Pengeluaran Lain'] };
 const STATUS_WARNA = { Tersedia: 'ok', Dipesan: 'warn', Terjual: 'muted', Rusak: 'bad', Batal: 'bad', Lunas: 'ok', 'Menunggu COD': 'warn', Retur: 'bad' };
 
-async function api(action, data) {
-  if (API_URL.indexOf('http') !== 0) throw new Error('API_URL belum diisi di index.html');
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, pin: store.get('tr_pin'), data })
-  });
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.error || 'Gagal');
+class ApiError extends Error {
+  constructor(msg, code, net) { super(msg); this.code = code || ''; this.net = !!net; }
+}
+
+/* extra = { pin } hanya untuk aksi 'login'. Aksi lain memakai token sesi. */
+async function api(action, data, extra) {
+  if (API_URL.indexOf('http') !== 0) throw new ApiError('API_URL belum diisi di index.html', 'CONFIG');
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 45000);
+  let j;
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, token: store.get('tr_token'), data, ...extra })
+    });
+    j = await res.json();
+  } catch (e) {
+    throw new ApiError(e.name === 'AbortError' ? 'Koneksi terlalu lambat (lebih dari 45 detik).' : 'Tidak bisa terhubung ke server. Periksa sinyal internet.', 'NET', true);
+  } finally { clearTimeout(timer); }
+  if (!j.ok) throw new ApiError(j.error || 'Gagal', j.code);
   return j.data;
 }
 
@@ -135,8 +159,29 @@ function Photo({ label, value, onChange, hint }) {
   </Field>;
 }
 
-function Sheet({ title, onClose, children }) {
-  return <div className="sheet-bg" onClick={onClose}>
+/* Input rupiah: hanya digit yang disimpan, tampilan diberi titik ribuan. Mencegah "50.000" terbaca sebagai 50. */
+function Rupiah({ value, onChange, ...rest }) {
+  const digit = String(value === undefined || value === null ? '' : value).replace(/\D/g, '').slice(0, 12);
+  return <input type="text" inputMode="numeric" autoComplete="off" placeholder="0" {...rest}
+    value={digit ? new Intl.NumberFormat('id-ID').format(Number(digit)) : ''}
+    onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 12))} />;
+}
+
+/* Guard kirim ganda yang sinkron (ref), bukan menunggu render ulang state */
+function useBusy() {
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const run = async fn => {
+    if (lock.current) return;
+    lock.current = true; setBusy(true);
+    let ok = false;
+    try { ok = await fn(); } finally { if (!ok) { lock.current = false; setBusy(false); } }
+  };
+  return [busy, run];
+}
+
+function Sheet({ title, onClose, closeOnBg, children }) {
+  return <div className="sheet-bg" onClick={closeOnBg ? onClose : undefined}>
     <div className="sheet" onClick={e => e.stopPropagation()}>
       <div className="sheet-head"><h3>{title}</h3><button className="icon" onClick={onClose}>Tutup</button></div>
       {children}
@@ -145,7 +190,7 @@ function Sheet({ title, onClose, children }) {
 }
 
 function useForm(init) {
-  const [f, setF] = useState(init);
+  const [f, setF] = useState(() => ({ ...init, rid: newRid() }));
   const set = k => v => setF(p => ({ ...p, [k]: v && v.target ? v.target.value : v }));
   return [f, set, setF];
 }
@@ -155,15 +200,12 @@ function Submit({ busy, label }) {
 }
 
 /* ====== Form ====== */
-function FormBarang({ barang, act }) {
+function FormBarang({ barang, user, act }) {
   const edit = !!barang;
   const [f, set] = useForm(edit ? { ...barang, foto: '' } : { tgl_beli: todayStr(), akun: 'Tunai', kategori: '', kondisi: 'Baik', harga_beli: '', harga_target: '' });
-  const [busy, setBusy] = useState(false);
-  const submit = async e => {
-    e.preventDefault(); setBusy(true);
-    const ok = await act(edit ? 'ubahBarang' : 'tambahBarang', f, edit ? 'Barang diperbarui' : 'Barang ditambahkan');
-    if (!ok) setBusy(false);
-  };
+  const [busy, run] = useBusy();
+  const buktiWajib = user.role !== 'admin' && f.akun === 'Rekening' && N(f.harga_beli) > 0;
+  const submit = e => { e.preventDefault(); run(() => act(edit ? 'ubahBarang' : 'tambahBarang', f, edit ? 'Barang diperbarui' : 'Barang ditambahkan')); };
   return <form onSubmit={submit}>
     <Photo label={edit ? 'Ganti foto (opsional)' : 'Foto barang *'} value={f.foto} onChange={set('foto')} />
     <Field label="Nama barang *"><input value={f.nama || ''} onChange={set('nama')} placeholder="mis. Jaket denim Levi's" /></Field>
@@ -176,30 +218,37 @@ function FormBarang({ barang, act }) {
     {!edit && <>
       <div className="grid2">
         <Field label="Tanggal beli"><input type="date" value={f.tgl_beli} onChange={set('tgl_beli')} /></Field>
-        <Field label="Harga beli *"><input type="number" inputMode="numeric" value={f.harga_beli} onChange={set('harga_beli')} /></Field>
+        <Field label="Harga beli *"><Rupiah value={f.harga_beli} onChange={set('harga_beli')} /></Field>
       </div>
       <Field label="Dibayar dari"><Seg value={f.akun} onChange={set('akun')} options={AKUN} /></Field>
-      <Photo label="Bukti bayar (opsional)" value={f.bukti} onChange={set('bukti')} hint="Screenshot transfer / foto nota bila ada" />
+      <Photo label={buktiWajib ? 'Bukti bayar *' : 'Bukti bayar (opsional)'} value={f.bukti} onChange={set('bukti')} hint={user.role !== 'admin' ? 'Wajib bila dibayar dari Rekening (screenshot transfer). Dari Tunai boleh dikosongkan.' : 'Screenshot transfer / foto nota bila ada'} />
     </>}
-    <Field label="Target harga jual"><input type="number" inputMode="numeric" value={f.harga_target} onChange={set('harga_target')} /></Field>
+    <Field label="Target harga jual"><Rupiah value={f.harga_target} onChange={set('harga_target')} /></Field>
     <Field label="Catatan"><textarea rows="2" value={f.catatan || ''} onChange={set('catatan')} /></Field>
     <Submit busy={busy} label={edit ? 'Simpan perubahan' : 'Simpan barang'} />
   </form>;
 }
 
-function FormJual({ data, kode, act }) {
+function FormJual({ data, kode, user, act }) {
   const tersedia = data.barang.filter(b => b.status === 'Tersedia');
   const awal = tersedia.find(b => b.kode === kode);
-  const [f, set] = useForm({ kode: kode || '', harga_jual: awal ? awal.harga_target : '', metode: 'Transfer', kanal: 'Instagram', ongkir: '', akun_ongkir: 'Tunai', tgl: todayStr() });
-  const [busy, setBusy] = useState(false);
-  const pilihBarang = v => { set('kode')(v); const b = tersedia.find(x => x.kode === v); if (b && !f.harga_jual) set('harga_jual')(b.harga_target); };
+  const targetOf = x => (x && N(x.harga_target) > 0 ? x.harga_target : '');   // target 0 = belum diisi → kolom dikosongkan
+  const [f, set] = useForm({ kode: kode || '', harga_jual: targetOf(awal), metode: 'Transfer', kanal: 'Instagram', ongkir: '', akun_ongkir: 'Tunai', tgl: todayStr() });
+  const [busy, run] = useBusy();
+  const staf = user.role !== 'admin';
   const b = tersedia.find(x => x.kode === f.kode);
-  const submit = async e => { e.preventDefault(); setBusy(true); if (!(await act('tambahPenjualan', f, 'Penjualan dicatat'))) setBusy(false); };
+  // harga jual ikut target barang yang baru dipilih, kecuali sudah diketik manual
+  const pilihBarang = v => {
+    const baru = tersedia.find(x => x.kode === v);
+    if (baru && (!f.harga_jual || String(f.harga_jual) === String(targetOf(b)))) set('harga_jual')(targetOf(baru));
+    set('kode')(v);
+  };
+  const submit = e => { e.preventDefault(); run(() => act('tambahPenjualan', f, 'Penjualan dicatat')); };
   return <form onSubmit={submit}>
     <Field label="Barang *"><Sel value={f.kode} onChange={pilihBarang} placeholder="Pilih barang tersedia" options={tersedia.map(x => ({ value: x.kode, label: `${x.kode} · ${x.nama}${x.ukuran ? ' (' + x.ukuran + ')' : ''}` }))} /></Field>
     {b && <p className="small muted" style={{ marginTop: -6 }}>Modal {rp(b.harga_beli)} · target {rp(b.harga_target)}</p>}
     <Field label="Metode bayar"><Seg value={f.metode} onChange={set('metode')} options={['Transfer', 'COD', 'Tunai']} /></Field>
-    <Field label="Harga jual *"><input type="number" inputMode="numeric" value={f.harga_jual} onChange={set('harga_jual')} /></Field>
+    <Field label="Harga jual *"><Rupiah value={f.harga_jual} onChange={set('harga_jual')} /></Field>
     {b && N(f.harga_jual) > 0 && <p className={'small ' + (N(f.harga_jual) - N(b.harga_beli) - N(f.ongkir) >= 0 ? 'ok' : 'bad')} style={{ marginTop: -6 }}>Perkiraan laba: {rp(N(f.harga_jual) - N(b.harga_beli) - N(f.ongkir))}</p>}
     <div className="grid2">
       <Field label="Kanal"><Sel value={f.kanal} onChange={set('kanal')} options={KANAL} /></Field>
@@ -210,31 +259,42 @@ function FormJual({ data, kode, act }) {
       <Field label="Kontak"><input value={f.kontak || ''} onChange={set('kontak')} placeholder="@ig / no WA" /></Field>
     </div>
     <div className="grid2">
-      <Field label="Ongkir ditanggung toko" hint="Isi 0 bila dibayar pembeli"><input type="number" inputMode="numeric" value={f.ongkir} onChange={set('ongkir')} /></Field>
+      <Field label="Ongkir ditanggung toko" hint="Kosongkan bila dibayar pembeli"><Rupiah value={f.ongkir} onChange={set('ongkir')} /></Field>
       <Field label="Ongkir dibayar dari"><Sel value={f.akun_ongkir} onChange={set('akun_ongkir')} options={AKUN} /></Field>
     </div>
-    {f.metode === 'Transfer' && <Photo label="Bukti transfer *" value={f.bukti} onChange={set('bukti')} />}
+    {N(f.ongkir) > 0 && <Photo label={staf ? 'Bukti ongkir *' : 'Bukti ongkir (opsional)'} value={f.bukti_ongkir} onChange={set('bukti_ongkir')} hint="Foto resi / nota ekspedisi" />}
+    {f.metode === 'Transfer' && <Photo label={staf ? 'Bukti transfer *' : 'Bukti transfer (opsional)'} value={f.bukti} onChange={set('bukti')} />}
     {f.metode === 'COD' && <p className="small warn">COD dicatat sebagai "Menunggu COD". Uang baru masuk kas saat dikonfirmasi cair.</p>}
     <Field label="Catatan"><input value={f.catatan || ''} onChange={set('catatan')} placeholder="No resi, dll" /></Field>
     <Submit busy={busy} label="Simpan penjualan" />
   </form>;
 }
 
-function FormCOD({ p, act }) {
+function FormCOD({ p, user, act }) {
   const [f, set] = useForm({ id: p.id, hasil: 'Lunas', diterima: p.harga_jual, akun: 'Rekening', biaya_retur: '' });
-  const [busy, setBusy] = useState(false);
-  const submit = async e => { e.preventDefault(); setBusy(true); if (!(await act('konfirmasiCOD', f, 'COD dikonfirmasi'))) setBusy(false); };
+  const [busy, run] = useBusy();
+  const staf = user.role !== 'admin';
+  // satu field "bukti" di server; di formulir dipisah supaya bukti pencairan tidak terbawa jadi bukti biaya retur
+  const submit = e => {
+    e.preventDefault();
+    const { bukti_cair, bukti_retur, ...sisa } = f;
+    run(() => act('konfirmasiCOD', { ...sisa, bukti: f.hasil === 'Lunas' ? bukti_cair : bukti_retur }, 'COD dikonfirmasi'));
+  };
   return <form onSubmit={submit}>
     <p className="small muted">{p.kode} · {p.pembeli || '-'} · harga {rp(p.harga_jual)}</p>
     <Field label="Hasil"><Seg value={f.hasil} onChange={set('hasil')} options={['Lunas', 'Retur']} /></Field>
     {f.hasil === 'Lunas' ? <>
-      <Field label="Uang diterima bersih *" hint="Setelah dipotong biaya COD/ekspedisi"><input type="number" inputMode="numeric" value={f.diterima} onChange={set('diterima')} /></Field>
+      <Field label="Uang diterima bersih *" hint="Setelah dipotong biaya COD/ekspedisi"><Rupiah value={f.diterima} onChange={set('diterima')} /></Field>
+      {N(f.diterima) > N(p.harga_jual) && <p className="small warn" style={{ marginTop: -6 }}>Uang diterima lebih besar dari harga jual. Pastikan angkanya benar.</p>}
       <Field label="Masuk ke"><Seg value={f.akun} onChange={set('akun')} options={AKUN} /></Field>
-      <Photo label="Bukti pencairan *" value={f.bukti} onChange={set('bukti')} />
+      <Photo label={staf ? 'Bukti pencairan *' : 'Bukti pencairan (opsional)'} value={f.bukti_cair} onChange={set('bukti_cair')} />
     </> : <>
       <Field label="Alasan retur *"><input value={f.alasan || ''} onChange={set('alasan')} /></Field>
-      <Field label="Biaya retur (bila ada)"><input type="number" inputMode="numeric" value={f.biaya_retur} onChange={set('biaya_retur')} /></Field>
-      <Field label="Biaya dibayar dari"><Seg value={f.akun} onChange={set('akun')} options={AKUN} /></Field>
+      <Field label="Biaya retur (bila ada)"><Rupiah value={f.biaya_retur} onChange={set('biaya_retur')} /></Field>
+      {N(f.biaya_retur) > 0 && <>
+        <Field label="Biaya dibayar dari"><Seg value={f.akun} onChange={set('akun')} options={AKUN} /></Field>
+        <Photo label={staf ? 'Bukti biaya retur *' : 'Bukti biaya retur (opsional)'} value={f.bukti_retur} onChange={set('bukti_retur')} hint="Foto resi / nota ekspedisi" />
+      </>}
       <p className="small muted">Barang kembali berstatus Tersedia.</p>
     </>}
     <Submit busy={busy} label="Konfirmasi" />
@@ -243,9 +303,9 @@ function FormCOD({ p, act }) {
 
 function FormKas({ user, act }) {
   const [f, set, setF] = useForm({ jenis: 'Keluar', akun: 'Tunai', kategori: '', tgl: todayStr(), dari: 'Tunai', ke: 'Rekening' });
-  const [busy, setBusy] = useState(false);
+  const [busy, run] = useBusy();
   const kats = f.jenis === 'Pindah' ? [] : KAT_KAS[f.jenis].concat(user.role === 'admin' ? ['Penyesuaian'] : []);
-  const submit = async e => { e.preventDefault(); setBusy(true); if (!(await act('tambahKas', f, 'Kas dicatat'))) setBusy(false); };
+  const submit = e => { e.preventDefault(); run(() => act('tambahKas', f, 'Kas dicatat')); };
   return <form onSubmit={submit}>
     <Field label="Jenis"><Seg value={f.jenis} onChange={v => setF(p => ({ ...p, jenis: v, kategori: '' }))} options={['Masuk', 'Keluar', 'Pindah']} /></Field>
     {f.jenis === 'Pindah' ? <div className="grid2">
@@ -256,11 +316,11 @@ function FormKas({ user, act }) {
       <Field label="Kategori *"><Sel value={f.kategori} onChange={set('kategori')} options={kats} placeholder="Pilih" /></Field>
     </>}
     <div className="grid2">
-      <Field label="Nominal *"><input type="number" inputMode="numeric" value={f.nominal || ''} onChange={set('nominal')} /></Field>
+      <Field label="Nominal *"><Rupiah value={f.nominal} onChange={set('nominal')} /></Field>
       <Field label="Tanggal"><input type="date" value={f.tgl} onChange={set('tgl')} /></Field>
     </div>
     <Field label="Keterangan *"><input value={f.keterangan || ''} onChange={set('keterangan')} /></Field>
-    <Photo label={f.jenis === 'Keluar' && user.role !== 'admin' ? 'Bukti *' : 'Bukti (opsional)'} value={f.bukti} onChange={set('bukti')} />
+    <Photo label={user.role !== 'admin' ? 'Bukti *' : 'Bukti (opsional)'} value={f.bukti} onChange={set('bukti')} hint={user.role !== 'admin' ? 'Wajib untuk semua catatan kas: foto nota, screenshot transfer, atau slip setoran.' : undefined} />
     <Submit busy={busy} label="Simpan" />
   </form>;
 }
@@ -277,7 +337,7 @@ function hitung({ barang, penjualan, kas }) {
   const cod = penjualan.filter(p => p.status === 'Menunggu COD');
   return {
     saldo, total: saldo.Tunai + saldo.Rekening, bmap,
-    stok: tersedia.length, nilaiStok: sum(tersedia, b => N(b.harga_beli)),
+    stok: tersedia.length, nilaiStok: sum(barang.filter(b => b.status === 'Tersedia' || b.status === 'Dipesan'), b => N(b.harga_beli)),
     terjualBln: lunasBln.length, omzetBln: sum(lunasBln, p => N(p.diterima)), labaBln: sum(lunasBln, labaOf),
     belanjaBln: sum(barang.filter(b => b.status !== 'Batal' && String(b.tgl_beli).startsWith(ym)), b => N(b.harga_beli)),
     cod, codNominal: sum(cod, p => N(p.harga_jual)),
@@ -289,6 +349,11 @@ function hitung({ barang, penjualan, kas }) {
 function Ringkasan({ data, s, open }) {
   const Stat = ({ l, v, c }) => <div className="card stat" style={{ marginBottom: 0 }}><div className="lbl">{l}</div><div className={'val ' + (c || '')}>{v}</div></div>;
   return <div>
+    {data.peringatan && data.peringatan.length > 0 && <div className="card" style={{ borderColor: 'var(--bad)' }}>
+      <b className="bad">Data di Sheet perlu diperiksa ({data.peringatan.length})</b>
+      {data.peringatan.slice(0, 6).map((w, i) => <div key={i} className="small" style={{ padding: '4px 0' }}>{w}</div>)}
+      {data.peringatan.length > 6 && <div className="small muted">…dan {data.peringatan.length - 6} lainnya.</div>}
+    </div>}
     <h2>Saldo</h2>
     <div className="grid2">
       <Stat l="Tunai" v={rp(s.saldo.Tunai)} c={s.saldo.Tunai < 0 ? 'bad' : ''} />
@@ -387,7 +452,7 @@ function PenjualanList({ data, s, user, open, act }) {
         <div className="grow"><div className="trunc"><b>{b ? b.nama : p.kode}</b></div>
           <div className="small muted">{tglPendek(p.tgl)} · {p.kanal} · {p.metode} · {p.pembeli || '-'}</div>
           <div className="small">{rp(p.harga_jual)}{p.status === 'Lunas' && <span className={s.labaOf(p) >= 0 ? 'ok' : 'bad'}> · laba {rp(s.labaOf(p))}</span>}
-            {p.bukti && <> · <a href={p.bukti} target="_blank" rel="noopener">bukti</a></>}</div></div>
+            {p.bukti && <> · <a href={p.bukti} target="_blank" rel="noopener noreferrer">bukti</a></>}</div></div>
         <div className="right small"><Tag s={p.status} />
           {user.role === 'admin' && p.status !== 'Batal' && <div><button className="icon" onClick={() => batal(p)}>batalkan</button></div>}</div>
       </div>;
@@ -407,7 +472,7 @@ function KasList({ data, s, user, act }) {
     <div className="card">{list.length === 0 ? <p className="muted">Belum ada transaksi.</p> : list.map(k =>
       <div key={k.id} className={'item' + (k.status === 'Batal' ? ' strike' : '')} style={{ cursor: 'default' }}>
         <div className="grow"><div className="trunc"><b>{k.kategori}</b> · <span className="small">{k.keterangan}</span></div>
-          <div className="small muted">{tglPendek(k.tgl)} · {k.akun} · {k.dibuat_oleh}{k.bukti && <> · <a href={k.bukti} target="_blank" rel="noopener">bukti</a></>}</div></div>
+          <div className="small muted">{tglPendek(k.tgl)} · {k.akun} · {k.dibuat_oleh}{k.bukti && <> · <a href={k.bukti} target="_blank" rel="noopener noreferrer">bukti</a></>}</div></div>
         <div className="right"><b className={k.jenis === 'Masuk' ? 'ok' : 'bad'}>{k.jenis === 'Masuk' ? '+' : '−'}{rp(k.nominal)}</b>
           {user.role === 'admin' && k.status !== 'Batal' && (!k.ref || k.kategori === 'Pindah Saldo') && <div><button className="icon" onClick={() => batal(k)}>batalkan</button></div>}</div>
       </div>)}</div>
@@ -416,17 +481,19 @@ function KasList({ data, s, user, act }) {
 
 /* ====== App ====== */
 function Login({ onLogin }) {
-  const [pin, setPin] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const go = async e => {
-    e.preventDefault(); setBusy(true); setErr(''); store.set('tr_pin', pin);
-    try { onLogin(await api('login')); } catch (x) { store.del('tr_pin'); setErr(x.message); }
-    setBusy(false);
+  const [pin, setPin] = useState(''); const [err, setErr] = useState(''); const [busy, run] = useBusy();
+  const go = e => {
+    e.preventDefault(); setErr('');
+    run(async () => {
+      try { const r = await api('login', {}, { pin }); store.set('tr_token', r.token); onLogin(r); return true; }
+      catch (x) { setErr(x.message); setPin(''); return false; }
+    });
   };
   return <div className="login"><form className="card" onSubmit={go}>
     <h1 style={{ marginTop: 0 }}>Tripting</h1>
-    <Field label="PIN"><input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} autoFocus /></Field>
+    <Field label="PIN"><input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} autoFocus /></Field>
     {err && <p className="err small">{err}</p>}
-    <button className="btn primary block" disabled={busy || !pin}>{busy ? 'Memeriksa…' : 'Masuk'}</button>
+    <button className="btn primary block" disabled={busy || pin.length !== 6}>{busy ? 'Memeriksa…' : 'Masuk'}</button>
   </form></div>;
 }
 
@@ -437,25 +504,41 @@ function App() {
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
   const [loading, setLoading] = useState(false);
-  const [boot, setBoot] = useState(!!store.get('tr_pin'));
+  const [boot, setBoot] = useState(!!store.get('tr_token'));
+  const [gagalMuat, setGagalMuat] = useState('');
 
   const notify = m => { setToast(m); setTimeout(() => setToast(''), 2600); };
+  const keluarLokal = () => { store.del('tr_token'); setUser(null); setData(null); setModal(null); setGagalMuat(''); setTab('Ringkasan'); };
   const load = async () => {
     setLoading(true);
-    try { const d = await api('getAll'); setData(d); setUser(d.user); }
-    catch (x) { if (/PIN/.test(x.message)) { store.del('tr_pin'); setUser(null); } notify(x.message); }
+    try { const d = await api('getAll'); setData(d); setUser(d.user); setGagalMuat(''); }
+    catch (x) {
+      // hanya sesi yang benar-benar berakhir yang mengeluarkan pengguna; gangguan jaringan/kunci login tidak
+      if (x.code === 'SESI') keluarLokal(); else if (!data) setGagalMuat(x.message);
+      notify(x.message);
+    }
     setLoading(false); setBoot(false);
   };
-  useEffect(() => { if (store.get('tr_pin')) load(); }, []);
+  useEffect(() => { if (store.get('tr_token')) load(); }, []);
 
   const act = async (action, payload, okMsg) => {
-    try { await api(action, payload); setModal(null); notify(okMsg); await load(); return true; }
-    catch (x) { alert(x.message); return false; }
+    try { await api(action, payload); }
+    catch (x) {
+      if (x.code === 'SESI') { keluarLokal(); notify(x.message); return false; }
+      alert(x.net ? x.message + '\n\nPerubahan ini MUNGKIN sudah tersimpan. Tekan "Muat ulang" dan periksa dulu. Mengirim ulang dari formulir yang sama aman: tidak akan tercatat dobel.' : x.message);
+      return false;
+    }
+    setModal(null); notify(okMsg); await load(); return true;
   };
   const s = useMemo(() => data ? hitung(data) : null, [data]);
 
   if (boot) return <div className="login muted">Memuat…</div>;
-  if (!user) return <Login onLogin={u => { setUser(u); load(); }} />;
+  if (!data && gagalMuat) return <div className="login"><div className="card">
+    <p className="err">{gagalMuat}</p>
+    <button className="btn primary block" onClick={load}>{loading ? 'Memuat…' : 'Coba lagi'}</button>
+    <button className="btn block" style={{ marginTop: 8 }} onClick={keluarLokal}>Masuk ulang dengan PIN</button>
+  </div></div>;
+  if (!user) return <Login onLogin={u => { setUser({ nama: u.nama, role: u.role }); load(); }} />;
   if (!data) return <div className="login muted">Memuat data…</div>;
 
   const fabFor = { Barang: () => setModal({ t: 'tambahBarang' }), Penjualan: () => setModal({ t: 'jual' }), Kas: () => setModal({ t: 'kas' }) };
@@ -466,7 +549,7 @@ function App() {
       <h1>{tab}</h1>
       <span className="small muted">{user.nama}</span>
       <button className="icon" onClick={load}>{loading ? '…' : 'Muat ulang'}</button>
-      <button className="icon" onClick={() => { store.del('tr_pin'); setUser(null); setData(null); }}>Keluar</button>
+      <button className="icon" onClick={() => { api('keluar').catch(() => { }); keluarLokal(); }}>Keluar</button>
     </header>
     <div className="wrap">
       {tab === 'Ringkasan' && <Ringkasan data={data} s={s} open={setModal} />}
@@ -476,12 +559,12 @@ function App() {
     </div>
     {fabFor[tab] && <button className="fab" onClick={fabFor[tab]} aria-label="Tambah">+</button>}
     <nav className="tabs">{['Ringkasan', 'Barang', 'Penjualan', 'Kas'].map(t => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</nav>
-    {modal && <Sheet title={judul[modal.t]} onClose={() => setModal(null)}>
-      {modal.t === 'tambahBarang' && <FormBarang act={act} />}
-      {modal.t === 'editBarang' && <FormBarang barang={modal.b} act={act} />}
+    {modal && <Sheet title={judul[modal.t]} onClose={() => setModal(null)} closeOnBg={modal.t === 'barang'}>
+      {modal.t === 'tambahBarang' && <FormBarang user={user} act={act} />}
+      {modal.t === 'editBarang' && <FormBarang barang={modal.b} user={user} act={act} />}
       {modal.t === 'barang' && <DetailBarang b={modal.b} data={data} user={user} open={setModal} act={act} />}
-      {modal.t === 'jual' && <FormJual data={data} kode={modal.kode} act={act} />}
-      {modal.t === 'cod' && <FormCOD p={modal.p} act={act} />}
+      {modal.t === 'jual' && <FormJual data={data} kode={modal.kode} user={user} act={act} />}
+      {modal.t === 'cod' && <FormCOD p={modal.p} user={user} act={act} />}
       {modal.t === 'kas' && <FormKas user={user} act={act} />}
     </Sheet>}
     {toast && <div className="toast">{toast}</div>}
